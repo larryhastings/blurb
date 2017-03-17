@@ -302,8 +302,11 @@ Add a blurb (a Misc/NEWS entry) to the current CPython repo.
     os.close(handle)
     atexit.register(lambda : os.unlink(tmp_path))
 
-    with open(tmp_path, "wt") as f:
-        f.write(template)
+    def init_tmp_with_template():
+        with open(tmp_path, "wt") as f:
+            f.write(template)
+
+    init_tmp_with_template()
 
     while True:
         subprocess.run([editor, tmp_path])
@@ -333,7 +336,7 @@ Add a blurb (a Misc/NEWS entry) to the current CPython repo.
         # secretly the issue can start with either bpo-<n>: or Issue #<n>:
         issue_number = None
         if lines:
-            prefix, colon, _ = lines[0].partition(":")
+            prefix, colon, after_colon = lines[0].partition(":")
             if colon:
                 _, bpo, number = prefix.partition("bpo-")
                 if not bpo:
@@ -343,7 +346,8 @@ Add a blurb (a Misc/NEWS entry) to the current CPython repo.
 
         failure = None
         if not lines:
-            failure = "no message!"
+            failure = "No message!"
+            init_tmp_with_template()
         elif not section:
             failure = "No 'section' specified.  You must provide one!"
         elif section_twice:
@@ -353,11 +357,16 @@ Add a blurb (a Misc/NEWS entry) to the current CPython repo.
         elif issue_number is None:
             failure = "No bpo issue number specified!  Blurb must start with 'Issue #<number>:!'"
         elif longest_line(lines) > 76:
+            # yes, this line is > 80 columns.  it's a visual joke!
             failure = "One of your lines is longer than 76 characters!  Sorry... make your lines shorter."
+        elif (len(lines) == 1) and (not after_colon):
+            failure = "No message!"
+
         if failure:
-            error(f"Error: {failure}")
+            print()
+            print(f"Error: {failure}")
+            print()
             prompt("Hit return to retry (or Ctrl-C to abort)")
-            sys.exit(0)
             continue
         break
 
@@ -405,6 +414,18 @@ def merge_blurbs(filenames):
     return "".join(texts)
 
 
+def super_unlink(path):
+    try:
+        subprocess.run(["git", "rm", "-f", path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError:
+        pass
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        pass
+
+
+
 @subcommand
 def tidy(version):
     """
@@ -443,7 +464,7 @@ to the front.)
     # step 3: remove now-tidied-up files
     for filename in old_filenames:
         if not filename.endswith(".0.rst"):
-            subprocess.run(["git", "rm", "-f", filename])
+            super_unlink(filename)
 
 
 @subcommand
@@ -492,14 +513,7 @@ This is used by the release manager when cutting a new release.
     subprocess.run(cmdline).check_returncode()
 
     if os.path.isfile(no_changes):
-        try:
-            subprocess.run(["git", "rm", "-f", no_changes], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        except subprocess.CalledProcessError:
-            pass
-        try:
-            os.unlink(no_changes)
-        except FileNotFoundError:
-            pass
+        super_unlink(no_changes)
         print(f'Removed "{no_changes}".')
 
 
