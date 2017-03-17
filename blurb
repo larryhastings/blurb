@@ -1,0 +1,792 @@
+#!/usr/bin/env python3
+
+copyright_notice = """
+blurb version 1.0
+Part of the blurb package.
+Copyright 2015-2017 by Larry Hastings.
+Licensed to the PSF under a contributor agreement.
+"""
+
+import atexit
+import builtins
+from collections import OrderedDict
+import glob
+import hashlib
+import inspect
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import uuid
+
+##
+## Some notes:
+##
+## * The first thing this script does is chdir to the Misc/ directory
+##   of your current CPython checkout.  From that point on you may
+##   always assume you're in that directory (unless you change it,
+##   in which case... change it back when you're done!).
+##
+
+template = """
+
+## Uncomment one of these "section:" lines to specify which section
+## this entry should go in in Misc/NEWS.
+##
+#section: Core and Builtins
+#section: Library
+#section: Documentation
+#section: Tests
+#section: Build
+#section: Windows
+#section: Mac OS X
+#section: IDLE
+#section: Tools/Demos
+#section: C API
+##
+##
+## Write your Misc/NEWS entry below.  The first line of your entry
+## must start with "Issue #", followed by a bpo number.
+## Don't add the "- ", blurb will do it for you.
+#########################################################################
+#########################################################################
+
+Issue #:
+""".lstrip()
+
+sections = []
+
+for line in template.split('\n'):
+    line = line.strip()
+    prefix, found, section = line.partition("#section: ")
+    if found and not prefix:
+        sections.append(section.strip())
+
+
+def sortable_time():
+    return time.strftime("%Y.%m.%d.%H.%M.%S", time.gmtime())
+
+def release_date_time():
+    return time.strftime("%Y-%m-%d", time.gmtime())
+
+
+def prompt(prompt):
+    return input(f"[{prompt}> ")
+
+
+def require_ok(prompt):
+    prompt = f"[{prompt}> "
+    while True:
+        s = input(prompt).strip()
+        if s == 'ok':
+            return s
+
+
+def strip_whitespace_lines(lines):
+    # strip from head
+    while lines:
+        if lines[0]:
+            break
+        lines.pop(0)
+
+    # strip from tail
+    while lines:
+        if lines[-1]:
+            return
+        lines.pop()
+
+
+def longest_line(lines):
+    longest = 0
+    for line in lines:
+        longest = max(longest, len(line))
+    return longest
+
+
+def which(command):
+    for element in os.environ["PATH"].split(":"):
+        path = os.path.join(element, command)
+        if os.path.isfile(path):
+            return path
+
+
+def version_key(element):
+    fields = list(element.split("."))
+    if len(fields) == 1:
+        return element
+
+    # in sorted order,
+    # 3.5.0a1 < 3.5.0b1 < 3.5.0rc1 < 3.5.0
+    # so for sorting purposes we transform
+    # "3.5." and "3.5.0" into "3.5.0zz0"
+    last = fields.pop()
+    for s in ("a", "b", "rc"):
+        if s in last:
+            last, stage, stage_version = last.partition(s)
+            break
+    else:
+        stage = 'zz'
+        stage_version = "0"
+
+    fields.append(last)
+    while len(fields) < 3:
+        fields.append("0")
+
+    fields.extend([stage, stage_version])
+    fields = [s.rjust(6, "0") for s in fields]
+
+    return ".".join(fields)
+
+
+def glob_versions(*wildcards, ignore=()):
+    versions = set()
+    old_dir = os.getcwd()
+    os.chdir("NEWS.d")
+    for wildcard in wildcards:
+        versions |= set(glob.glob(wildcard))
+    os.chdir(old_dir)
+    xform = [version_key(x) for x in versions]
+    xform.sort(reverse=True)
+    versions = sorted(versions, key=version_key, reverse=True)
+    return versions
+
+
+def glob_blurbs(version, *sections):
+    # I want the parameter to be named sections, dammit.
+    # But I also want the global to be named sections, dammit.
+    # So how do I access the latter if I have the former?
+    if not sections:
+        def fetch_sections():
+            global sections
+            return sections
+        sections = fetch_sections()
+
+    blurbs = []
+    for section in sections:
+        wildcard = os.path.join("NEWS.d", version, section.replace("/", "-") + ".*")
+        entries = glob.glob(wildcard)
+        entries.sort(reverse=True)
+        blurbs.extend(entries)
+    return blurbs
+
+
+def printable_version(version):
+    if version == "next":
+        return version
+    if "a" in version:
+        return version.replace("a", " alpha ")
+    if "b" in version:
+        return version.replace("b", " beta ")
+    if "rc" in version:
+        return version.replace("rc", " release candidate ")
+    return version + " final"
+
+
+def run(s):
+    process = subprocess.run(s.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    process.check_returncode()
+    return process.stdout.decode('ascii')
+
+
+def chdir_to_misc_dir():
+    try:
+        run("git log -r 7f777ed95a19224294949e1b4ce56bbffcb1fe9f")
+    except subprocess.SubprocessError:
+        sys.exit("You're not inside a CPython repo right now!")
+
+    git_dir = os.path.abspath(run("git rev-parse --git-dir").strip())
+    root = os.path.dirname(git_dir)
+    misc = os.path.join(root, "Misc")
+    os.chdir(misc)
+
+
+def error(*a):
+    s = " ".join(str(x) for x in a)
+    sys.exit("Error: " + s)
+
+
+subcommands = {}
+
+def subcommand(fn):
+    global subcommands
+    name = fn.__name__
+    subcommands[name] = fn
+    return fn
+
+def get_subcommand(subcommand):
+    fn = subcommands.get(subcommand)
+    if not fn:
+        error(f"Unknown subcommand: {subcommand}")
+    return fn
+
+
+
+@subcommand
+def help(subcommand=None):
+    """
+Print help for subcommands.
+
+Prints the help text for the specified subcommand.
+If subcommand is not specified, prints one-line summaries for every command.
+    """
+
+    if not subcommand:
+        print("blurb [subcommand] [options...]")
+        print()
+        print("Management tool for CPython Misc/NEWS and Misc/NEWS.d entries.")
+        print()
+
+        # print list of subcommands
+        summaries = []
+        longest_name_len = -1
+        for name, fn in subcommands.items():
+            longest_name_len = max(longest_name_len, len(name))
+            if not fn.__doc__:
+                error("help is broken, no docstring for " + fn.__name__)
+            fields = fn.__doc__.lstrip().split("\n")
+            if not fields:
+                first_line = "(no help available)"
+            else:
+                first_line = fields[0]
+            summaries.append((name, first_line))
+        summaries.sort()
+
+        print("Available subcommands:")
+        print()
+        for name, summary in summaries:
+            print(" ", name.ljust(longest_name_len), " ", summary)
+
+        print()
+        print("If blurb is run without any arguments, this is equivalent to 'blurb add'.")
+
+        sys.exit(0)
+
+    fn = get_subcommand(subcommand)
+    doc = fn.__doc__.strip()
+    if not doc:
+        error("help is broken, no docstring for " + subcommand)
+
+    parameters = []
+    append = parameters.append
+    nesting = 0
+    spacer = ""
+    for name, p in inspect.signature(fn).parameters.items():
+        append(spacer)
+        spacer = " "
+        has_default = (p.default != inspect._empty)
+        if has_default:
+            append("[")
+            nesting += 1
+        append(name)
+    append("]" * nesting)
+
+    print("blurb", subcommand, "".join(parameters))
+    print()
+    print(doc)
+    sys.exit(0)
+
+
+@subcommand
+def add():
+    """
+Add a blurb (a Misc/NEWS entry) to the current CPython repo.
+    """
+
+    editor = os.environ.get('EDITOR')
+    if not editor:
+        error("EDITOR environment variable not set!")
+
+    handle, tmp_path = tempfile.mkstemp(".rst")
+    os.close(handle)
+    atexit.register(lambda : os.unlink(tmp_path))
+
+    with open(tmp_path, "wt") as f:
+        f.write(template)
+
+    while True:
+        subprocess.run([editor, tmp_path])
+
+        with open(tmp_path, "rt") as f:
+            text = f.read()
+
+        lines = []
+        section = None
+        section_twice = False
+        section_prefix = "section:"
+
+        for line in text.split("\n"):
+            line = line.rstrip()
+            if line.startswith(section_prefix):
+                if section:
+                    section_twice = True
+                else:
+                    section = line[len(section_prefix):].strip()
+                continue
+            if line.startswith("#"):
+                continue
+            lines.append(line.rstrip())
+
+        strip_whitespace_lines(lines)
+
+        # secretly the issue can start with either bpo-<n>: or Issue #<n>:
+        issue_number = None
+        if lines:
+            prefix, colon, _ = lines[0].partition(":")
+            if colon:
+                _, bpo, number = prefix.partition("bpo-")
+                if not bpo:
+                    _, issue, number = prefix.partition("Issue #")
+                if number and number.isdigit():
+                    issue_number = int(number)
+
+        failure = None
+        if not lines:
+            failure = "no message!"
+        elif not section:
+            failure = "No 'section' specified.  You must provide one!"
+        elif section_twice:
+            failure = "More than one 'section' specified.  Only provide one!"
+        elif section not in sections:
+            failure = "Invalid section!  You must use one of the predefined sections."
+        elif issue_number is None:
+            failure = "No bpo issue number specified!  Blurb must start with 'Issue #<number>:!'"
+        elif longest_line(lines) > 76:
+            failure = "One of your lines is longer than 76 characters!  Sorry... make your lines shorter."
+        if failure:
+            error(f"Error: {failure}")
+            prompt("Hit return to retry (or Ctrl-C to abort)")
+            sys.exit(0)
+            continue
+        break
+
+    text = "\n".join(lines) + "\n"
+
+    filename = ".".join([
+        section,
+        sortable_time(),
+        hashlib.md5(text.encode("utf-8")).hexdigest(),
+        "rst",
+        ])
+    dirname = "NEWS.d/next"
+    if not os.path.isdir(dirname):
+        os.mkdir(dirname)
+
+    path = os.path.join(dirname, filename)
+    with open(path, "wt") as f:
+        f.write(text)
+
+    subprocess.run(["git", "add", path]).check_returncode()
+
+
+def merge_blurbs(filenames):
+    texts = []
+    append = texts.append
+    for filename in filenames:
+        with open(filename) as f:
+            text = f.read()
+
+        # if it's the tidy file, just emit it unchanged.
+        # note that the tidy file has been sorted last,
+        # which is where we wanted it.
+        if filename.endswith(".0.rst"):
+            append(text)
+            continue
+
+        prefix = "- "
+        for line in text.strip().split("\n"):
+            append(prefix)
+            append(line)
+            append("\n")
+            prefix = "  "
+        append("\n")
+
+    return "".join(texts)
+
+
+@subcommand
+def tidy(version):
+    """
+Combine all files in a version into just a few files.
+
+tidy combines all the individual files for a version into just a few files,
+one file per section.
+
+Example:
+    blurb tidy 3.4.0a1
+        Merge all the files in Misc/NEWS.d/3.4.0a1 into just a few files.
+
+The files are named "<section name>.0.rst".  (This ensures they sort
+to the front.)
+    """
+    versions = glob_versions(version)
+
+    old_filenames = []
+
+    # step 1: scan in everything
+    data = dict()
+    for section in sections:
+        blurbs = glob_blurbs(version, section)
+        text = merge_blurbs(blurbs)
+        if text:
+            data[section] = text
+            old_filenames.extend(blurbs)
+
+    # step 2: write out everything
+    for section, text in data.items():
+        filename = os.path.join("NEWS.d", version, section.replace("/", "-") + ".0.rst")
+        with open(filename, "wt") as f:
+            f.write(text)
+        subprocess.run(["git", "add", filename])
+
+    # step 3: remove now-tidied-up files
+    for filename in old_filenames:
+        if not filename.endswith(".0.rst"):
+            subprocess.run(["git", "rm", "-f", filename])
+
+
+@subcommand
+def release(version):
+    """
+Move all new blurbs to their release directory.
+
+This is used by the release manager when cutting a new release.
+    """
+    if version == ".":
+        # harvest version number from dirname of repo
+        # I remind you, we're in the Misc subdir right now
+        version = os.path.basename(os.path.dirname(os.getcwd()))
+
+    dirname = os.path.join("NEWS.d", version)
+    if not os.path.isdir(dirname):
+        os.mkdir(dirname)
+
+    no_changes = os.path.join(dirname, "no.changes.rst")
+    release_date = os.path.join(dirname, "release.date.rst")
+
+    current_date = release_date_time() + "\n"
+    print(f'Updating {release_date} to "{current_date.strip()}".')
+    with open(release_date, "wt") as f:
+        f.write(current_date)
+    subprocess.run(["git", "add", release_date]).check_returncode()
+
+    blurbs = glob_blurbs("next")
+    if not blurbs:
+        existing_blurbs = glob_blurbs(version)
+        if existing_blurbs:
+            print("Nothing else to do!")
+            return
+
+        print(f"No blurbs found.  Adding {no_changes} for {version}.")
+        with open(no_changes, "wt") as f:
+            f.write(f"There were no new changes in version {version}.\n")
+        subprocess.run(["git", "add", no_changes]).check_returncode()
+        return
+
+    count = len(blurbs)
+    print(f'Moving {count} blurbs to "{version}".')
+    cmdline = ["git", "mv"]
+    cmdline.extend(blurbs)
+    cmdline.append(dirname)
+    subprocess.run(cmdline).check_returncode()
+
+    if os.path.isfile(no_changes):
+        try:
+            subprocess.run(["git", "rm", "-f", no_changes], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except subprocess.CalledProcessError:
+            pass
+        try:
+            os.unlink(no_changes)
+        except FileNotFoundError:
+            pass
+        print(f'Removed "{no_changes}".')
+
+
+@subcommand
+def merge(output=None):
+    """
+Merge all blurbs together into a single Misc/NEWS file.
+
+Optional output argument specifies where to write to.
+Default is <cpython-root>/Misc/NEWS.
+    """
+    if output:
+        output = os.path.join(original_dir, output)
+    else:
+        output = "NEWS"
+
+    if not os.path.isdir("NEWS.d"):
+        error("You don't have a Misc/NEWS.d in this repo!")
+
+    versions = glob_versions("*")
+
+    if os.path.exists(output):
+        builtins.print("You already have a", repr(output), "file.")
+        require_ok("Type ok to overwrite")
+
+    news = open(output, "wt")
+
+    def print(*a, sep=" "):
+        s = sep.join(str(x) for x in a)
+        return builtins.print(s, file=news)
+
+    print ("""
++++++++++++
+Python News
++++++++++++
+
+""".strip())
+
+    def write_header():
+        header = "What's New in Python " + printable_version(version) + "?"
+        print()
+        print(header)
+        print("=" * len(header))
+        print()
+
+        try:
+            with open(os.path.join("NEWS.d", version, "release.date.rst")) as f:
+                release_date = f.read().strip()
+        except FileNotFoundError:
+            release_date = "XXXX-XX-XX"
+        print("Release date:", release_date)
+        print()
+
+        no_changes = os.path.join("NEWS.d", version, "no.changes.rst")
+        if os.path.exists(no_changes):
+            # you can't have both a no.changes.rst and any other files
+            entries = glob_blurbs(version)
+            if entries:
+                error(f"Invalid data for version {version}!  It has a 'no.changes.rst' AND blurbs!")
+
+            with open(no_changes) as f:
+                print(f.read())
+            print()
+            print()
+
+    for version in versions:
+        no_changes = os.path.join("NEWS.d", version, "no.changes.rst")
+        if os.path.exists(no_changes):
+            write_header()
+            continue
+
+        need_to_write_header = True
+        for section in sections:
+            entries = glob_blurbs(version, section)
+            if not entries:
+                continue
+
+            if need_to_write_header:
+                need_to_write_header = False
+                write_header()
+
+            print(section)
+            print("-" * len(section))
+            print()
+
+            print(merge_blurbs(entries))
+
+
+
+@subcommand
+def split():
+    """
+Split the current Misc/NEWS into a zillion little blurb files.
+    """
+    global sections
+
+    if not os.path.isfile("NEWS"):
+        error("You don't have a Misc/NEWS file!")
+
+    if os.path.exists("NEWS.d"):
+        print("You already have a NEWS.d.  This command will blow it away and recreate it.")
+        while True:
+            ok = input("[Type ok to confirm this filesystem violence> ").strip()
+            if ok == "ok":
+                break
+        shutil.rmtree("NEWS.d")
+    os.mkdir("NEWS.d")
+
+    serial_number = 9999
+    output = None
+
+    version = None
+    section = None
+    whats_new = "What's New in Python "
+
+    accumulator = []
+
+    def assure_version_dir():
+        try:
+            dirname = "NEWS.d/" + version
+            os.mkdir(dirname)
+        except FileExistsError:
+            pass
+
+    def flush():
+        nonlocal accumulator
+        nonlocal serial_number
+        if accumulator:
+            if version:
+                while accumulator:
+                    line = accumulator.pop()
+                    if not line.rstrip():
+                        continue
+                    accumulator.append(line)
+                    break
+                if not accumulator:
+                    return
+                if not section:
+                    if line != "No changes.":
+                        print(accumulator)
+                        print(line)
+                        error("No section for line " + str(line_number) + "!")
+                    return
+                dirname = "NEWS.d/" + version
+                assure_version_dir()
+                filename = dirname + "/" + section.replace("/", "-") + "." + str(serial_number).rjust(5, "0") + ".rst"
+                serial_number -= 1
+                text = "\n".join(accumulator)
+                with open(filename, "w") as output:
+                    output.write(text)
+            accumulator.clear()
+
+    sections = set(sections)
+
+    release_date = "Release date:"
+
+    with open("NEWS") as f:
+        for line_number, line in enumerate(f):
+            line = line.rstrip()
+
+            # clean the slightly dirty data:
+            # 1. inconsistent names for sections, etc
+            for old, new in (
+                ("C-API", "C API"),
+                ("Core and builtins", "Core and Builtins"),
+                ("Tools", "Tools/Demos"),
+                ("Misc", "Windows"), # only used twice, both were really Windows
+                ("Mac", "Mac OS X"),
+                ("Extension Modules", "Library"),
+                ("Whats' New in Python 2.7.6?", "What's New in Python 2.7.6?"),
+                ):
+                if line == old:
+                    line = new
+            # 2. unusual indenting
+            _line = line.lstrip()
+            if _line.startswith("- Issue #"):
+                line = _line
+            if _line == ".characters() and ignorableWhitespace() methods.  Original patch by Sebastian":
+                line = " " + line
+            # 3. fix version for What's New
+            if line.startswith(whats_new):
+                flush()
+                version = line[len(whats_new):].strip().lower()
+                for old, new in (
+                    ("?", ""),
+                    (" alpha ", "a"),
+                    (" beta ", "b"),
+                    (" release candidate ", "rc"),
+                    (" final", ""),
+                    ("3.5a", "3.5.0a"),
+                    ):
+                    version = version.replace(old, new)
+                section = None
+                continue
+            elif line in sections:
+                flush()
+                section = line
+                continue
+            elif line.startswith((
+                "===",
+                "---",
+                "+++",
+                "Python News",
+                "**(For information about older versions, consult the HISTORY file.)**",
+                )):
+                continue
+            elif line.startswith(release_date) or (line.startswith("*") and release_date in line):
+                while line.startswith("*"):
+                    line = line[1:]
+                while line.endswith("*"):
+                    line = line[:-1]
+                date = line[len(release_date):].strip()
+                path = os.path.join("NEWS.d", version, "release.date.rst")
+                assure_version_dir()
+                with open(path, "w") as f:
+                    f.write(date + "\n")
+                continue
+            elif line.strip() in (
+                '- No changes since release candidate 2',
+                'There were no code changes between 3.5.3rc1 and 3.5.3 final.',
+                ):
+                if line.startswith("- "):
+                    line = line[2:]
+                path = os.path.join("NEWS.d", version, "no.changes.rst")
+                with open(path, "w") as f:
+                    f.write(line + "\n")
+                continue
+            elif line.startswith("- "):
+                flush()
+                line = line[2:]
+            elif line.startswith("  "):
+                line = line[2:]
+            elif line.startswith(" * "):
+                line = line[3:]
+            elif line:
+                sys.exit(f"Didn't recognize line {line_number}! " + repr(line))
+            accumulator.append(line)
+
+    print("Now run these commands:\n\n    git rm Misc/NEWS\n    git add Misc/NEWS.d/*/*\n    git commit\n\nGo on... I dare you.")
+
+
+
+args = sys.argv[1:]
+if not args:
+    subcommand = "add"
+else:
+    subcommand = args[0]
+    args = args[1:]
+
+fn = get_subcommand(subcommand)
+try:
+    original_dir = os.getcwd()
+    chdir_to_misc_dir()
+    sys.exit(fn(*args))
+except TypeError as e:
+    # almost certainly wrong number of arguments.
+    # count arguments of function and print appropriate error message.
+    specified = len(args)
+    required = optional = 0
+    for p in inspect.signature(fn).parameters.values():
+        if p.default == inspect._empty:
+            required += 1
+        else:
+            optional += 1
+    total = required + optional
+
+    if required <= specified <= total:
+        # whoops, must be a real type error, reraise
+        raise e
+
+    how_many = f"{specified} argument"
+    if specified != 1:
+        how_many += "s"
+
+    if total == 0:
+        middle = "accepts no arguments"
+    else:
+        if total == required:
+            middle = f"requires"
+        else:
+            plural = "" if required == 1 else "s"
+            middle = f"requires at least {required} argument{plural} and at most"
+        middle += f" {total} argument"
+        if total != 1:
+            middle += "s"
+
+    print(f'Error: Wrong number of arguments!\n\nblurb {subcommand} {middle},\nand you specified {how_many}.')
+    print()
+    print("usage: ", end="")
+    help(subcommand)
