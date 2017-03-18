@@ -211,6 +211,30 @@ the right thing.  If NEWS entries were already written to the
 final version directory, you'd have to move those around as
 part of the cherry-picking process.
 
+The "add_server"
+----------------
+
+Nick Coghlan points out that it'd be nice if contributors didn't
+have to install and use a new tool.  We can do that!  Submitted
+for your consideration is the **blurb** "add_server", a simple!
+prototype! dynamic web page that assists in constructing **blurb**
+NEWS entries.
+
+The basic idea: the contributor fills out a form, presses "Submit",
+and is given text to copy-and-paste into a file and what to name
+the file.
+
+Here's a sample of the input form:
+
+![Alt text](images/add_server.index.png?raw=true "add_server index")
+
+And here's what the result might look like:
+
+![Alt text](images/add_server.result.png?raw=true "add_server result")
+
+To try it yourself, simply install Flask then run ``python3 server.py`` from
+the ``add_server`` directory.
+
 
 Notes / Concerns / Possible Future Enhancements
 -----------------------------------------------

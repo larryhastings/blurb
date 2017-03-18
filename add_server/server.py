@@ -17,13 +17,14 @@ def index():
 def result():
 	section = request.form['section']
 	text = request.form['text']
-	whatsnew = request.form['whatsnew']
+
+	# whatsnew = request.form['whatsnew']
 
 	filename = "Misc/NEWS.d/next/" + ".".join([
         section,
         sortable_time(),
         hashlib.md5(text.encode("utf-8")).hexdigest(),
-        whatsnew,
+        # whatsnew,
         "rst",
         ])
 
