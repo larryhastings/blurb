@@ -226,11 +226,11 @@ the file.
 
 Here's a sample of the input form:
 
-![Alt text](images/add_server.index.png?raw=true "add_server index")
+![add_server index](images/add_server.index.png)
 
 And here's what the result might look like:
 
-![Alt text](images/add_server.result.png?raw=true "add_server result")
+![add_server result](images/add_server.result.png)
 
 To try it yourself, simply install Flask then run ``python3 server.py`` from
 the ``add_server`` directory.
