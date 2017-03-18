@@ -1,0 +1,53 @@
+<h1>blurb add server</h1>
+
+<form action="{{ url_for('result') }}" method="post">
+
+<p>
+Which section of <tt>Misc/NEWS</tt> should it go into?
+<br>
+<select name="section">
+<option value="Core and Builtins">Core and Builtins</option>
+<option value="Library">Library</option>
+<option value="Documentation">Documentation</option>
+<option value="Tests">Tests</option>
+<option value="Build">Build</option>
+<option value="Windows">Windows</option>
+<option value="Mac OS X">Mac OS X</option>
+<option value="IDLE">IDLE</option>
+<option value="Tools/Demos">Tools/Demos</option>
+<option value="C API">C API</option>
+</select>
+</p>
+
+<p>
+Would you like to flag it for consideration for "What's New"?
+<br>
+
+<select name="whatsnew">
+<option value="">No.</option>
+<option value="New Features">Yes, under "New Features"</option>
+<option value="Other Language Changes">Yes, under "Other Language Changes"</option>
+<option value="New Modules">Yes, under "New Modules"</option>
+<option value="Improved Modules">Yes, under "Improved Modules"</option>
+<option value="Other Module-level Changes">Yes, under "Other Module-level Changes"</option>
+<option value="Optimizations">Yes, under "Optimizations"</option>
+<option value="Build and C API Changes">Yes, under "Build and C API Changes"</option>
+<option value="Other Improvements">Yes, under "Other Improvements"</option>
+<option value="Deprecated">Yes, under "Deprecated"</option>
+<option value="Removed">Yes, under "Removed"</option>
+<option value="Porting To This Version">Yes, under "Porting To This Version"</option>
+</select>
+</p>
+
+<p>
+What do you want for your Misc/NEWS entry?
+<br>
+<textarea rows=10 cols=74 name="text"></textarea>
+</p>
+
+<input type="submit">
+
+</form>
+
+<div id=result>
+</div>
