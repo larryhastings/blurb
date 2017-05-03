@@ -1,6 +1,17 @@
 blurb
 =====
 
+
+These docs are out of date
+--------------------------
+
+Just a quick notice: these docs are currently out of date.
+Much of what they say is accurate, but far from all, and
+it's probably hard to tell which is which.  In other words,
+I wouldn't pay much attention to the technical details in
+this document right now, if I were you.
+
+
 Overview
 --------
 
