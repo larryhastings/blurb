@@ -54,7 +54,7 @@ template = """
 #.. section: C API
 
 # Write your Misc/NEWS entry below.  It should be a simple ReST paragraph.
-# Don't start with "- Issue #<n>:" or that sort of stuff.
+# Don't start with "- Issue #<n>: " or "- bpo-<n>: "or that sort of stuff.
 ###########################################################################
 
 
@@ -181,10 +181,11 @@ def glob_blurbs(version):
     filenames = []
     base = os.path.join("Misc", "NEWS.d", version)
     if version != "next":
-        filenames.append(base + ".rst")
+        wildcard = base + ".rst"
+        filenames.extend(glob.glob(wildcard))
     else:
         for section in sections:
-            wildcard = os.path.join(base, sanitize_section(section), "*")
+            wildcard = os.path.join(base, sanitize_section(section), "*.rst")
             entries = glob.glob(wildcard)
             entries.sort(reverse=True)
             filenames.extend(entries)
@@ -257,7 +258,7 @@ Format of the BODY section:
     (This formatting will be inserted when rendering the final output.)
   * Lines longer than 76 characters will be wordwrapped.
       * In the final output, the first line will have
-        "- Issue #<bpo-number>: " inserted at the front,
+        "- bpo-<bpo-number>: " inserted at the front,
         and subsequent lines will have two spaces inserted
         at the front.
 
@@ -758,7 +759,7 @@ This is used by the release manager when cutting a new release.
         print(f"No blurbs found.  Setting {version} as having no changes.")
         body = f"There were no new changes in version {version}.\n"
         metadata = {"no changes": "True", "bpo": "0", "section": "Library", "date": date, "nonce": nonceify(body)}
-        blurbs[0] = (body, metadata)
+        blurbs.append((metadata, body))
     else:
         no_changes = None
         count = len(filenames)
@@ -875,7 +876,7 @@ Python News
 
             bpo = metadata['bpo']
             if int(bpo):
-                body = "Issue #" + bpo + ": " + body
+                body = "bpo-" + bpo + ": " + body
             lines = textwrap.wrap(body, 76)
             body = "- " + "\n  ".join(lines) + "\n"
             print(body)
