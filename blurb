@@ -36,7 +36,7 @@ template = """
 #
 # Please enter the relevant bugs.python.org issue number here:
 #
-.. bpo:
+.. bpo: 
 
 #
 # Uncomment one of these "section:" lines to specify which section
@@ -439,7 +439,7 @@ Returns a dict.
 
     def ensure_metadata(self):
         metadata, body = self[-1]
-        assert section in metadata
+        assert 'section' in metadata
         for name, default in (
             ("bpo", "0"),
             ("date", sortable_datetime()),
