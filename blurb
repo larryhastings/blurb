@@ -663,8 +663,6 @@ def find_editor():
             '/usr/bin/editor',
             'editor',
             'nano',
-            'vim',
-            'emacs',
         ]
     for fallback in fallbacks:
         if os.path.isfile(fallback):
