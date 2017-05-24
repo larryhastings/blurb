@@ -31,6 +31,11 @@ import unittest
 import uuid
 
 
+#
+# This template is the canonical list of acceptable section names!
+# It's parsed internally into the "sections" set.
+#
+
 template = """
 
 #
@@ -48,7 +53,7 @@ template = """
 #.. section: Tests
 #.. section: Build
 #.. section: Windows
-#.. section: Mac OS X
+#.. section: macOS
 #.. section: IDLE
 #.. section: Tools/Demos
 #.. section: C API
@@ -109,6 +114,19 @@ class pushd:
 def safe_mkdir(path):
     if not os.path.exists(path):
         os.makedirs(path)
+
+
+def which(cmd, path="PATH"):
+    """Find cmd on PATH."""
+    if os.path.exists(cmd):
+        return cmd
+    if cmd[0] == '/':
+        return None
+    for segment in os.getenv(path).split(":"):
+        program = os.path.normpath(os.path.join(segment, cmd))
+        if os.path.exists(program):
+            return program
+    return None
 
 
 def strip_whitespace_lines(lines):
@@ -637,7 +655,16 @@ Add a blurb (a Misc/NEWS entry) to the current CPython repo.
 
     editor = os.environ.get('EDITOR')
     if not editor:
-        error("EDITOR environment variable not set!")
+        if sys.platform.startswith("linux"):
+            editor = "/usr/bin/editor"
+        elif sys.platform == "win32":
+            pass
+
+    if not os.path.isabs(editor):
+        editor = which(editor)
+
+    if not (editor and os.path.exists(editor)):
+        error("Can't determine what editor to use!\nPlease set EDITOR environment variable, or something.")
 
     handle, tmp_path = tempfile.mkstemp(".rst")
     os.close(handle)
@@ -930,6 +957,7 @@ Split the current Misc/NEWS into a zillion little blurb files.
     section = None
     see_also = None
     no_changes = None
+    security = None
     blurb_count = 0
     version_count = 0
 
@@ -942,6 +970,7 @@ Split the current Misc/NEWS into a zillion little blurb files.
         nonlocal see_also
         nonlocal no_changes
         nonlocal blurb_count
+        nonlocal security
 
         if accumulator:
             if version:
@@ -954,7 +983,13 @@ Split the current Misc/NEWS into a zillion little blurb files.
                     break
                 if see_also:
                     fields = []
-                    for field in see_also.split(", "):
+                    see_also = see_also.replace(" and ", ",")
+                    for field in see_also.split(","):
+                        field = field.strip()
+                        if not field:
+                            continue
+                        if field.startswith("and "):
+                            field = field[5:].lstrip()
                         if field.lower().startswith("issue"):
                             field = field[5:].strip()
                         if field.startswith("#"):
@@ -966,8 +1001,8 @@ Split the current Misc/NEWS into a zillion little blurb files.
                             pass
                         fields.append(field)
                     see_also = ", ".join(fields)
-                    print("see_also: ", repr(see_also))
-                    accumulator.append(f"(See also: {see_also}.)")
+                    # print("see_also: ", repr(see_also))
+                    accumulator.append(f"(See also: {see_also})")
                     see_also = None
                 if not accumulator:
                     return
@@ -983,6 +1018,9 @@ Split the current Misc/NEWS into a zillion little blurb files.
                 else:
                     assert no_changes
                 metadata["nonce"] = nonceify(body)
+                if security:
+                    metadata["security"] = "True"
+                    security = None
 
                 if release_date is not None:
                     assert not len(blurbs)
@@ -1029,7 +1067,8 @@ Split the current Misc/NEWS into a zillion little blurb files.
                 ("Tools", "Tools/Demos"),
                 ("Tools / Demos", "Tools/Demos"),
                 ("Misc", "Windows"), # only used twice, both were really Windows
-                ("Mac", "Mac OS X"),
+                ("Mac", "macOS"),
+                ("Mac OS X", "macOS"),
                 ("Extension Modules", "Library"),
                 ("Whats' New in Python 2.7.6?", "What's New in Python 2.7.6?"),
                 ):
@@ -1056,7 +1095,9 @@ Split the current Misc/NEWS into a zillion little blurb files.
                     version = version.replace(old, new)
                 section = None
                 continue
-            # 3.a. fix specific idiots who don't follow the style convention
+            # 3.a. fix specific precious little snowflakes
+            # who can't be bothered to follow our stifling style conventions
+            # and like, did their own *thing*, man.
             if line.startswith("- Issue #27181 remove statistics.geometric_mean"):
                 line = line.replace(" remove", ": remove")
             elif line.startswith("* bpo-30357: test_thread: setUp()"):
@@ -1090,9 +1131,30 @@ Split the current Misc/NEWS into a zillion little blurb files.
                 line = line.replace(" (Invalid behavior of unicode.lower):", ":")
             elif line.startswith("- Issue #4512 (part 2): Promote ``ZipImporter._get_filename()`` to be a public"):
                 line = line.replace(" (part 2):", ":")
-
-
-
+            elif line.startswith("- Revert bpo-26293 for zipfile breakage. See also bpo-29094."):
+                line = "- bpo-26293, bpo-29094: Change resulted because of zipfile breakage."
+            elif line.startswith("- Revert a37cc3d926ec (Issue #5322)."):
+                line = "- Issue #5322: Revert a37cc3d926ec."
+            elif line.startswith("- Patch #1970 by Antoine Pitrou: Speedup unicode whitespace and"):
+                line = "- Issue #1970: Speedup unicode whitespace and"
+            elif line.startswith("  linebreak detection"):
+                line = "  linebreak detection.  (Patch by Antoine Pitrou.)"
+            elif line.startswith("- Patch #1182394 from Shane Holloway: speed up HMAC.hexdigest."):
+                line = "- Issue #1182394: Speed up ``HMAC.hexdigest``.  (Patch by Shane Holloway.)"
+            elif line.startswith("- Variant of patch #697613: don't exit the interpreter on a SystemExit"):
+                line = "- Issue #697613: Don't exit the interpreter on a SystemExit"
+            elif line.startswith("- Bugs #1668596/#1720897: distutils now copies data files even if"):
+                line = "- Issue #1668596, #1720897: distutils now copies data files even if"
+            elif line.startswith("- Reverted patch #1504333 to sgmllib because it introduced an infinite"):
+                line = "- Issue #1504333: Reverted change to sgmllib because it introduced an infinite"
+            elif line.startswith("- PEP 465 and Issue #21176: Add the '@' operator for matrix multiplication."):
+                line = "- Issue #21176: PEP 465: Add the '@' operator for matrix multiplication."
+            elif line.title().startswith(("- Request #", "- Bug #", "- Patch #", "- Patches #")):
+                # print(f"FIXING LINE {line_number}: {line!r}")
+                line = "- Issue #" + line.partition('#')[2]
+                # print(f"FIXED LINE {line!r}")
+            # else:
+            #     print(f"NOT FIXING LINE {line_number}: {line!r}")
 
 
             # 4. determine the actual content of the line
@@ -1140,18 +1202,29 @@ Split the current Misc/NEWS into a zillion little blurb files.
             if line.startswith("- "):
                 flush_blurb()
                 line = line[2:]
-                if line.startswith("Issue #"):
-                    line = line[7:]
+                security = line.startswith("[Security]")
+                if security:
+                    line = line[10:].lstrip()
+
+                if line.startswith("Issue"):
+                    line = line[5:].lstrip()
+                    if line.startswith("s"):
+                        line = line[1:]
+                    line = line.lstrip()
+                    if line.startswith("#"):
+                        line = line[1:].lstrip()
                     parse_bpo = True
                 elif line.startswith("bpo-"):
                     line = line[4:]
                     parse_bpo = True
                 else:
+                    print(f"[[{line_number:8} no bpo]] {line}")
                     parse_bpo = False
                 if parse_bpo:
                     # GAAAH
                     if line == "17500, and https://github.com/python/pythondotorg/issues/945: Remove":
-                        line = "17500: Remove"
+                        line = "Remove"
+                        bpo = "17500"
                         see_also = "https://github.com/python/pythondotorg/issues/945"
                     else:
                         bpo, colon, line = line.partition(":")
@@ -1188,7 +1261,6 @@ Split the current Misc/NEWS into a zillion little blurb files.
                         sys.exit(f"Couldn't convert bpo number to int on line {line_number}! " + repr(bpo))
                     if see_also == "partially":
                         sys.exit(f"What the hell on line {line_number}! " + repr(bpo))
-
 
             # 4.6.1 continuation of blurb
             elif line.startswith("  "):
