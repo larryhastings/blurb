@@ -953,6 +953,20 @@ Split the current Misc/NEWS into a zillion little blurb files.
                     accumulator.append(line)
                     break
                 if see_also:
+                    fields = []
+                    for field in see_also.split(", "):
+                        if field.lower().startswith("issue"):
+                            field = field[5:].strip()
+                        if field.startswith("#"):
+                            field = field[1:]
+                        try:
+                            int(field)
+                            field = "bpo-" + field
+                        except ValueError:
+                            pass
+                        fields.append(field)
+                    see_also = ", ".join(fields)
+                    print("see_also: ", repr(see_also))
                     accumulator.append(f"(See also: {see_also}.)")
                     see_also = None
                 if not accumulator:
@@ -1004,12 +1018,16 @@ Split the current Misc/NEWS into a zillion little blurb files.
         for line_number, line in enumerate(f):
             line = line.rstrip()
 
+            if line.startswith("\ufeff"):
+                line = line[1:]
+
             # clean the slightly dirty data:
             # 1. inconsistent names for sections, etc
             for old, new in (
                 ("C-API", "C API"),
                 ("Core and builtins", "Core and Builtins"),
                 ("Tools", "Tools/Demos"),
+                ("Tools / Demos", "Tools/Demos"),
                 ("Misc", "Windows"), # only used twice, both were really Windows
                 ("Mac", "Mac OS X"),
                 ("Extension Modules", "Library"),
@@ -1038,9 +1056,44 @@ Split the current Misc/NEWS into a zillion little blurb files.
                     version = version.replace(old, new)
                 section = None
                 continue
-            # 3.a. fix colon for issue number:
+            # 3.a. fix specific idiots who don't follow the style convention
             if line.startswith("- Issue #27181 remove statistics.geometric_mean"):
                 line = line.replace(" remove", ": remove")
+            elif line.startswith("* bpo-30357: test_thread: setUp()"):
+                line = line.replace("* bpo-30357", "- bpo-30357")
+            elif line.startswith("- Issue #25262. Added support for BINBYTES8"):
+                line = line.replace("#25262.", "#25262:")
+            elif line.startswith("- Issue #21032. Fixed socket leak if"):
+                line = line.replace("#21032.", "#21032:")
+            elif line.startswith("- Issue ##665194: Update "):
+                line = line.replace("##665194", "#665194")
+            elif line.startswith("- Issue #13449 sched.scheduler.run()"):
+                line = line.replace("#13449 sched", "#13449: sched")
+            elif line.startswith("- Issue #8684 sched.scheduler class"):
+                line = line.replace("#8684 sched", "#8684: sched")
+            elif line.startswith(" bpo-29243: Prevent unnecessary rebuilding"):
+                line = line.replace(" bpo-29243:", "- bpo-29243:")
+            elif line.startswith((
+                "- Issue #11603 (again): Setting",
+                "- Issue #15801 (again): With string",
+                )):
+                line = line.replace(" (again):", ":")
+            elif line.startswith("- Issue #1665206 (partially): "):
+                line = line.replace(" (partially):", ":")
+            elif line.startswith("- Issue #2885 (partial): The"):
+                line = line.replace(" (partial):", ":")
+            elif line.startswith("- Issue #2885 (partial): The"):
+                line = line.replace(" (partial):", ":")
+            elif line.startswith("- Issue #1797 (partial fix):"):
+                line = line.replace(" (partial fix):", ":")
+            elif line.startswith("- Issue #5828 (Invalid behavior of unicode.lower): Fixed bogus logic in"):
+                line = line.replace(" (Invalid behavior of unicode.lower):", ":")
+            elif line.startswith("- Issue #4512 (part 2): Promote ``ZipImporter._get_filename()`` to be a public"):
+                line = line.replace(" (part 2):", ":")
+
+
+
+
 
             # 4. determine the actual content of the line
 
@@ -1053,6 +1106,7 @@ Split the current Misc/NEWS into a zillion little blurb files.
             # 4.2 heading ReST marker
             if line.startswith((
                 "===",
+                "---",
                 "---",
                 "+++",
                 "Python News",
@@ -1074,6 +1128,7 @@ Split the current Misc/NEWS into a zillion little blurb files.
             if line.strip() in (
                 '- No changes since release candidate 2',
                 'There were no code changes between 3.5.3rc1 and 3.5.3 final.',
+                'There were no changes between 3.4.6rc1 and 3.4.6 final.',
                 ):
                 no_changes = True
                 if line.startswith("- "):
@@ -1101,14 +1156,40 @@ Split the current Misc/NEWS into a zillion little blurb files.
                     else:
                         bpo, colon, line = line.partition(":")
                         line = line.lstrip()
-                        bpo, comma, see_also = bpo.partition(", ")
+                        bpo, comma, see_also = bpo.partition(",")
                         if comma:
                             see_also = see_also.strip()
+                            # if it's just an integer, add bpo- to the front
+                            try:
+                                int(see_also)
+                                see_also = "bpo-" + see_also
+                            except ValueError:
+                                pass
                         else:
-                            bpo, space_paren, see_also = bpo.partition(" (") # - Issue #21529 (CVE-2014-4616)
+                            # - Issue #21529 (CVE-2014-4616)
+                            bpo, space_paren, see_also = bpo.partition(" (")
                             if space_paren:
                                 see_also = see_also.rstrip(")")
-                    int(bpo) # this will throw if it's not a legal int
+                            else:
+                                # - Issue #19544 and Issue #1180:
+                                bpo, space_and, see_also = bpo.partition(" and ")
+                                if not space_and:
+                                    bpo, space_and, see_also = bpo.partition(" & ")
+                                if space_and:
+                                    see_also = see_also.replace("Issue #", "bpo-").strip()
+                                else:
+                                    # - Issue #5258/#10642: if site.py
+                                    bpo, slash, see_also = bpo.partition("/")
+                                    if space_and:
+                                        see_also = see_also.replace("#", "bpo-").strip()
+                    try:
+                        int(bpo) # this will throw if it's not a legal int
+                    except ValueError:
+                        sys.exit(f"Couldn't convert bpo number to int on line {line_number}! " + repr(bpo))
+                    if see_also == "partially":
+                        sys.exit(f"What the hell on line {line_number}! " + repr(bpo))
+
+
             # 4.6.1 continuation of blurb
             elif line.startswith("  "):
                 line = line[2:]
