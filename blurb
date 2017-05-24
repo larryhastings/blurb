@@ -534,8 +534,11 @@ def chdir_to_repo_root():
     except subprocess.SubprocessError:
         sys.exit("You're not inside a CPython repo right now!")
 
-    git_dir = os.path.abspath(run("git rev-parse --git-dir").strip())
-    root = os.path.dirname(git_dir)
+    git_dir = run("git rev-parse --git-dir").strip()
+    if '.git/worktrees' in git_dir:
+        with open(os.path.join(git_dir, 'gitdir')) as f:
+            git_dir = f.read().strip()
+    root = os.path.dirname(os.path.abspath(git_dir))
     os.chdir(root)
 
 
