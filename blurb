@@ -660,12 +660,13 @@ def find_editor():
     else:
         fallbacks = ['/etc/alternatives/editor', 'nano']
     for fallback in fallbacks:
-        if os.path.isfile(fallback):
-            return fallback
-        found_path = shutil.which(fallback)
-        if found_path:
+        if os.path.isabs(fallback):
+            found_path = fallback
+        else:
+            found_path = shutil.which(fallback)
+        if found_path and os.path.exists(found_path):
             return found_path
-    error('Could not find an editor! Set the EDITOR environment variable.')
+        error('Could not find an editor! Set the EDITOR environment variable.')
 
 
 @subcommand
