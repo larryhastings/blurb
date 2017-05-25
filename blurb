@@ -1228,7 +1228,7 @@ Split the current Misc/NEWS into a zillion little blurb files.
                     line = line[4:]
                     parse_bpo = True
                 else:
-                    print(f"[[{line_number:8} no bpo]] {line}")
+                    # print(f"[[{line_number:8} no bpo]] {line}")
                     parse_bpo = False
                 if parse_bpo:
                     # GAAAH
