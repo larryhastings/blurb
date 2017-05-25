@@ -1288,6 +1288,7 @@ Split the current Misc/NEWS into a zillion little blurb files.
 
     assert created_files
     subprocess.run(["git", "add", *created_files]).check_returncode()
+    subprocess.run(["git", "rm", "NEWS"], stdout=subprocess.PIPE).check_returncode()
 
     print(f"Wrote {blurb_count} news items across {version_count} versions.")
     print("Now run git commit.  Go on... I dare you.")
