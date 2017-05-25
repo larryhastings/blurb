@@ -41,13 +41,14 @@ modifying ``Misc/NEWS``.
 Under ``Misc/NEWS.d`` you'll find the following:
 
 * A single file for all news entries per previous revision,
-  named for the exact version number, with the extension `.rst`.
-  Example: `Misc/NEWS.d/3.6.0b2.rst`.
+  named for the exact version number, with the extension ``.rst``.
+  Example: ``Misc/NEWS.d/3.6.0b2.rst``.
 
-* The `next` directory, which contains subdirectories representing
-  the various `Misc/NEWS` categories.  Inside these subdirectories
-  are more `.rst` files with long, uninteresting, computer-generated
-  names.  Example: `Misc/NEWS.d/next/Library/2017-05-04-12-24-06.bpo-25458.Yl4gI2.rst`
+* The ``next`` directory, which contains subdirectories representing
+  the various ``Misc/NEWS`` categories.  Inside these subdirectories
+  are more ``.rst`` files with long, uninteresting, computer-generated
+  names.  Example:
+  ``Misc/NEWS.d/next/Library/2017-05-04-12-24-06.bpo-25458.Yl4gI2.rst``
 
 
 blurb subcommands
@@ -58,43 +59,27 @@ Like many modern utilities, **blurb** has only one executable
 through subcommands.  The subcommand is the first argument specified
 on the command-line.
 
-If no subcommand is specified, **blurb** assumes you meant *blurb add*.
+If no subcommand is specified, **blurb** assumes you meant ``blurb add``.
 
 
 blurb help
 ~~~~~~~~~~
 
-**blurb** is self-documenting through the *blurb help* subcommand.
+**blurb** is self-documenting through the ``blurb help`` subcommand.
 Run without any further arguments, it prints a list of all subcommands,
 with a one-line summary of the functionality of each.  Run with a
 third argument, it prints help on that subcommand (e.g. ``blurb help release``).
 
 
-blurb split
-~~~~~~~~~~~
-
-*blurb split* only needs to be run once per-branch.
-It reads in ``Misc/NEWS``
-and splits it into individual `.rst` files.
-The text files are stored as follows::
-
-    Misc/NEWS.d/<version>.rst
-
-``<version>`` is the version number of Python where the
-change was committed.  Pre-release versions are denoted
-with an abbreviation: ``a`` for alphas, ``b`` for betas,
-and ``rc`` for release candidates.
-
-
 blurb add
 ~~~~~~~~~
 
-*blurb add* adds a new Misc/NEWS entry for you.
+``blurb add`` adds a new Misc/NEWS entry for you.
 It opens a text editor on a template; you edit the
-file, save, and exit.  *blurb* then stores the file
-in the correct place, and stages it in `git` for you.
+file, save, and exit.  **blurb** then stores the file
+in the correct place, and stages it in ``git`` for you.
 
-The template for the *blurb add* message looks like this::
+The template for the ``blurb add`` message looks like this::
 
     #
     # Please enter the relevant bugs.python.org issue number here:
@@ -111,7 +96,7 @@ The template for the *blurb add* message looks like this::
     #.. section: Tests
     #.. section: Build
     #.. section: Windows
-    #.. section: Mac OS X
+    #.. section: macOS
     #.. section: IDLE
     #.. section: Tools/Demos
     #.. section: C API
@@ -122,24 +107,24 @@ The template for the *blurb add* message looks like this::
 
 Here's how you interact with the file:
 
-* Add the `bugs.python.org` issue number for this checkin to the
-  end of the `.. bpo:` line.
+* Add the ``bugs.python.org`` issue number for this checkin to the
+  end of the ``.. bpo:`` line.
 
-* Uncomment the line with the relevant `Misc/NEWS` section for this entry.
-  For example, if this should go in the `Library` section, uncomment
-  the line reading `#.. section: Library`.  To uncomment, just delete
-  the `#` at the front of the line.
+* Uncomment the line with the relevant ``Misc/NEWS`` section for this entry.
+  For example, if this should go in the ``Library`` section, uncomment
+  the line reading ``#.. section: Library``.  To uncomment, just delete
+  the ``#`` at the front of the line.
 
 * Finally, go to the end of the file, and enter your NEWS entry.
   This should be a single paragraph of English text using
   simple ReST markup.
 
-When *blurb add* gets a valid entry, it writes it to a file
+When ``blurb add`` gets a valid entry, it writes it to a file
 with the following format::
 
     Misc/NEWS.d/next/<section>/<datetime>.bpo-<bpo>.<nonce>.rst
 
-For example, a file added by *blurb add* might look like this::
+For example, a file added by ``blurb add`` might look like this::
 
     Misc/NEWS.d/next/Library/2017-05-04-12-24-06.bpo-25458.Yl4gI2.rst
 
@@ -149,7 +134,7 @@ For example, a file added by *blurb add* might look like this::
 ``YYYY-MM-DD-hh-mm-ss``.
 
 ``<nonce>`` is a hopefully-unique string of characters meant to
-prevent filename collisions.  *blurb* creates this by computing
+prevent filename collisions.  **blurb** creates this by computing
 the MD5 hash of the text, converting it to base64 (using the
 "urlsafe" alphabet), and taking the first 6 characters of that.
 
@@ -163,54 +148,83 @@ This filename ensures several things:
   even if they check in at the exact same second.
 
 
-Finally, *blurb add* stages the file in git for you.
+Finally, ``blurb add`` stages the file in git for you.
 
 
 blurb merge
 ~~~~~~~~~~~
 
-*blurb merge* recombines all the files in the
+``blurb merge`` recombines all the files in the
 ``Misc/NEWS.d`` tree back into a single ``NEWS`` file.
 
-*blurb merge* accepts only a single command-line argument:
-the file to write to.  By default it overwrites ``Misc/NEWS``.
+``blurb merge`` accepts only a single command-line argument:
+the file to write to.  By default it writes to
+``Misc/NEWS`` (relative to the root of your CPython checkout).
 
 Splitting and recombining the existing ``Misc/NEWS`` file
 doesn't recreate the previous ``Misc/NEWS`` exactly.  This
 is because ``Misc/NEWS`` never used a consistent ordering
-for the "sections" inside each release, whereas *blurb merge*
+for the "sections" inside each release, whereas ``blurb merge``
 has a hard-coded preferred ordering for the sections.  Also,
-*blurb* aggressively reflows paragraphs to < 78 columns,
+**blurb** aggressively reflows paragraphs to < 78 columns,
 wheras the original hand-edited file occasionally had lines
-> 80 columns.  Finally, *blurb* strictly uses `bpo-<n>:` to
+> 80 columns.  Finally, **blurb** strictly uses ``bpo-<n>:`` to
 specify issue numbers at the beginnings of entries, wheras
-the legacy approach to `Misc/NEWS` required using `Issue #<n>:`.
+the legacy approach to ``Misc/NEWS`` required using ``Issue #<n>:``.
 
 
 blurb release
 ~~~~~~~~~~~~~
 
-*blurb release* is used by the release manager as part of
+``blurb release`` is used by the release manager as part of
 the CPython release process.  It takes exactly one argument,
 the name of the version being released.
 
 Here's what it does under the hood:
 
 * Combines all recently-added NEWS entries from
-  the `Misc/NEWS.d/next` directory into `Misc/NEWS.d/<version>.rst`.
-* Runs *blurb merge* to produce an updated `Misc/NEWS` file.
+  the ``Misc/NEWS.d/next`` directory into ``Misc/NEWS.d/<version>.rst``.
+* Runs ``blurb merge`` to produce an updated ``Misc/NEWS`` file.
 
-One hidden feature: if the version specified is ".", *blurb release*
+One hidden feature: if the version specified is ``.``, ``blurb release``
 uses the name of the directory CPython is checked out to.
 (When making a release I generally name the directory after the
 version I'm releasing, and using this shortcut saves me some typing.)
 
 
+blurb split
+~~~~~~~~~~~
+
+``blurb split`` only needs to be run once per-branch, ever.
+It reads in ``Misc/NEWS``
+and splits it into individual ``.rst`` files.
+The text files are stored as follows::
+
+    Misc/NEWS.d/<version>.rst
+
+``<version>`` is the version number of Python where the
+change was committed.  Pre-release versions are denoted
+with an abbreviation: ``a`` for alphas, ``b`` for betas,
+and ``rc`` for release candidates.
+
+The individual ``<version>.rst`` files actually (usually)
+contain multiple entries.  Each entry is delimited by a
+single line containing ``..`` by itself.
+
+The assumption is, at the point we convert over to *blurb*,
+we'll run ``blurb split`` on each active branch,
+remove ``Misc/NEWS`` from the repo entirely,
+never run ``blurb split`` ever again,
+and ride off into the sunset, confident that the world is now
+a better place.
+
+
+
 The "next" directory
 --------------------
 
-You may have noticed that *blurb add* adds news entries to
-a directory called ``next``, and *blurb release* combines those
+You may have noticed that ``blurb add`` adds news entries to
+a directory called ``next``, and ``blurb release`` combines those
 news entries into a single file named with the version.  Why
 is that?
 
@@ -254,18 +268,19 @@ Note that the ``add_server`` prototype is currently out of date
 and shouldn't be used.
 It creates files with an older filename nomenclature.
 (It was only a prototype anyway--if we do this for real,
-we should probably do it in pure Javascript.)
+we should probably do it in pure Javascript, so it can be a static
+``.html`` file and we can stick it in the CPython Dev Guide.)
 
 
 Notes / Concerns / Possible Future Enhancements
 -----------------------------------------------
 
-* I suspect **blurb** doesn't run well under Windows.
-  Who knows... it hasn't been tested.
+* Nothing right now!  Note that we're using Github for
+  issue tracking.
 
 
 Copyright
 ---------
 
 **blurb** is Copyright 2015-2017 by Larry Hastings.
-icensed to the PSF under a contributor agreement.
+Licensed to the PSF under a contributor agreement.
