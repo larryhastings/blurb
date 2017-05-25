@@ -658,12 +658,7 @@ def find_editor():
     if sys.platform == 'win32':
         fallbacks = ['notepad.exe']
     else:
-        fallbacks = [
-            '/etc/alternatives/editor',
-            '/usr/bin/editor',
-            'editor',
-            'nano',
-        ]
+        fallbacks = ['/etc/alternatives/editor', 'nano']
     for fallback in fallbacks:
         if os.path.isfile(fallback):
             return fallback
