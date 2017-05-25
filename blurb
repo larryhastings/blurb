@@ -328,12 +328,11 @@ class Blurbs(list):
             nonlocal metadata
             nonlocal self
 
-            assert body
+            if not body:
+                throw("Blurb 'body' text must not be empty!")
             body = "\n".join(body).rstrip()
             body = textwrap.wrap(body, width=76)
             body = "\n".join(body).rstrip()
-            if not body:
-                throw("Blurb 'body' text must not be empty!")
             for naughty_prefix in ("- ", "Issue #", "bpo-"):
                 if body.startswith(naughty_prefix):
                     throw("Blurb 'body' can't start with " + repr(naughty_prefix) + "!")
