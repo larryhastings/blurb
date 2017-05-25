@@ -388,9 +388,9 @@ class Blurbs(list):
         """
 Read a blurb file.
 
-Roughly equivalent to blurb.parse(open(filename).read()).
+Broadly equivalent to blurb.parse(open(filename).read()).
         """
-        with open(filename, "rt") as f:
+        with open(filename, "rt", encoding="utf-8") as f:
             text = f.read()
         self.parse(text, metadata=metadata, filename=filename)
 
@@ -417,7 +417,7 @@ Roughly equivalent to blurb.parse(open(filename).read()).
         safe_mkdir(dirname)
 
         text = str(self)
-        with open(path, "wt") as f:
+        with open(path, "wt", encoding="utf-8") as f:
             f.write(text)
 
     @staticmethod
@@ -535,7 +535,7 @@ def chdir_to_repo_root():
 
     git_dir = run("git rev-parse --git-dir").strip()
     if '.git/worktrees' in git_dir:
-        with open(os.path.join(git_dir, 'gitdir')) as f:
+        with open(os.path.join(git_dir, 'gitdir'), "rt", encoding="utf-8") as f:
             git_dir = f.read().strip()
     root = os.path.dirname(os.path.abspath(git_dir))
     os.chdir(root)
@@ -681,7 +681,7 @@ Add a blurb (a Misc/NEWS entry) to the current CPython repo.
     atexit.register(lambda : os.unlink(tmp_path))
 
     def init_tmp_with_template():
-        with open(tmp_path, "wt") as f:
+        with open(tmp_path, "wt", encoding="utf-8") as f:
             f.write(template)
 
     init_tmp_with_template()
@@ -724,50 +724,6 @@ def super_unlink(path):
         pass
 
 
-
-
-
-# @subcommand
-# def tidy(version):
-#     """
-# Combine all files in a version into just a few files.
-
-# tidy combines all the individual files for a version into just a few files,
-# one file per section.
-
-# Example:
-#     blurb tidy 3.4.0a1
-#         Merge all the files in Misc/NEWS.d/3.4.0a1 into just a few files.
-
-# The files are named "<section name>.0.rst".  (This ensures they sort
-# to the front.)
-#     """
-#     versions = glob_versions(version)
-
-#     old_filenames = []
-
-#     # step 1: scan in everything
-#     data = dict()
-#     for section in sections:
-#         blurbs = glob_blurbs(version, section)
-#         text = merge_blurbs(blurbs)
-#         if text:
-#             data[section] = text
-#             old_filenames.extend(blurbs)
-
-#     # step 2: write out everything
-#     for section, text in data.items():
-#         filename = os.path.join("Misc", "NEWS.d", version, sanitize_section(section) + ".0.rst")
-#         with open(filename, "wt") as f:
-#             f.write(text)
-#         subprocess.run(["git", "add", filename])
-
-#     # step 3: remove now-tidied-up files
-#     for filename in old_filenames:
-#         if not filename.endswith(".0.rst"):
-#             super_unlink(filename)
-
-
 @subcommand
 def release(version):
     """
@@ -779,9 +735,6 @@ This is used by the release manager when cutting a new release.
         # harvest version number from dirname of repo
         # I remind you, we're in the Misc subdir right now
         version = os.path.basename(os.path.dirname(os.getcwd()))
-
-    # no_changes = os.path.join(dirname, "no.changes.rst")
-    # release_date = os.path.join(dirname, "release.date.rst")
 
     existing_filenames = glob_blurbs(version)
     if existing_filenames:
@@ -821,10 +774,11 @@ This is used by the release manager when cutting a new release.
         super_unlink(filename)
 
     merge(forced=True)
+
     # since the release manager is the only person who has any
     # business touching Misc/NEWS now, we'll only automatically
     # stage the changes to it here
-    subprocess.run(["git", "add", output, "Misc/NEWS"]).check_returncode()
+    # subprocess.run(["git", "add", output, "Misc/NEWS"]).check_returncode()
 
 
 
@@ -849,7 +803,7 @@ Default is <cpython-root>/Misc/NEWS.
         builtins.print("You already have a", repr(output), "file.")
         require_ok("Type ok to overwrite")
 
-    news = open(output, "wt")
+    news = open(output, "wt", encoding="utf-8")
 
     def print(*a, sep=" "):
         s = sep.join(str(x) for x in a)
@@ -889,11 +843,6 @@ Python News
         metadata, body = blurbs[0]
         release_date = metadata["release date"]
 
-        # try:
-        #     with open(os.path.join("NEWS.d", version, "release.date.rst")) as f:
-        #         release_date = f.read().strip()
-        # except FileNotFoundError:
-        #     release_date = "XXXX-XX-XX"
         print(f"*Release date: {release_date}*")
         print()
 
@@ -954,7 +903,7 @@ Split the current Misc/NEWS into a zillion little blurb files.
         if not os.path.exists(path):
             dirname = os.path.dirname(path)
             safe_mkdir(dirname)
-            with open(path, "wt") as f:
+            with open(path, "wt", encoding="utf-8") as f:
                 f.write("Put news entry 'blurb' files for the {section} section here.")
             created_files.append(dirname)
             created_files.append(path)
@@ -1062,7 +1011,7 @@ Split the current Misc/NEWS into a zillion little blurb files.
         created_files.append(output)
         version_count += 1
 
-    with open("NEWS") as f:
+    with open("NEWS", "rt", encoding="utf-8") as f:
         for line_number, line in enumerate(f):
             line = line.rstrip()
 
